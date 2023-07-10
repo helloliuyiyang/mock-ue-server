@@ -1,7 +1,15 @@
+/**
+该 package 仅用于未指定数据模板的情况，不推荐使用
+
+在这里存一些不用的代码
+*/
+
 package model
 
 import "math/rand"
 
+// deprecated
+// RedisData 默认数据格式，仅用于未指定数据模板的情况
 type RedisData struct {
 	CharacterDatas []*CharacterData `json:"characterDatas"`
 }
@@ -47,3 +55,25 @@ func NewDefaultCharacterData(entityId string) *CharacterData {
 		WalkSpeed: 150,
 	}
 }
+
+/*
+	if c.tplInfo == nil { // 没有模板文件，生成默认数据，废弃，后面临时修改工具来不及，使用这种方式
+		redisData := model.RedisData{CharacterDatas: make([]*model.CharacterData, 0, c.userCount)}
+		for i := 0; i < c.userCount; i++ {
+			data := model.NewDefaultCharacterData(fmt.Sprintf("%s-%d", serverName, i))
+			redisData.CharacterDatas = append(redisData.CharacterDatas, data)
+		}
+		bytes, err := json.Marshal(redisData)
+		if err != nil {
+			logger.Fatalf("Json marshal failed: %+v", err)
+		}
+		key := fmt.Sprintf(redisKeyTpl, serverName)
+		_, err = c.redisCli.Set(ctx, key, string(bytes), 0).Result()
+		if err != nil {
+			logger.Errorf("Redis set failed: %+v", err)
+			continue
+		}
+		logger.Infof("Redis set success. key: %s", key)
+		logger.Debugf("=== Redis set success. key: %s, value: %s", key, string(bytes))
+	} else { // 有模板文件，生成模板数据
+*/

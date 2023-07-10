@@ -2,17 +2,17 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/redis/go-redis/v9"
 
 	"mock-ue-server/pkg/database"
 	"mock-ue-server/pkg/logutil"
-	"mock-ue-server/pkg/model"
+	"mock-ue-server/pkg/tamplate"
 )
+
+const redisKeyTpl = "%s---PawnDatas"
 
 var logger = logutil.GetLogger()
 
@@ -20,23 +20,45 @@ type MockController struct {
 	redisCli    *redis.Client
 	serverNames []string
 	userCount   int
+	intervalMs  int
+	tplInfo     *tamplate.TemplateInfo
+	// injectParamsCache 注入模板 params 的数据缓存，包含了 Schema 和值
+	injectParamsCache *InjectParamsCache
 }
 
-func NewMockController(db string, serverNames []string, userCount int) (*MockController, error) {
-	err := database.InitRedisCli(db)
-	if err != nil {
+func NewMockController(serverNames []string, userCount int,
+	tplFilePath string, intervalMs int) (*MockController, error) {
+	var (
+		tplInfo *tamplate.TemplateInfo
+		err     error
+	)
+
+	// 解析模板信息
+	if tplFilePath != "" {
+		tplInfo, err = tamplate.ParseTplInfo(tplFilePath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 初始化缓存，Cache 中包含需要注入到模板的数据的 Schema 和 值
+	if err = initParamsCache(serverNames, userCount, tplInfo.FieldsStr); err != nil {
 		return nil, err
 	}
+
 	return &MockController{
-		redisCli:    database.GetRedisCli(),
-		serverNames: serverNames,
-		userCount:   userCount,
+		redisCli:          database.GetRedisCli(),
+		serverNames:       serverNames,
+		userCount:         userCount,
+		intervalMs:        intervalMs,
+		tplInfo:           tplInfo,
+		injectParamsCache: getParamsCache(),
 	}, nil
 }
 
+// todo cancel 用于定时任务发生致命错误，需要退出整个进程，这里暂时不用，预留
 func (c *MockController) Run(ctx context.Context, cancel context.CancelFunc) {
-	// 循环 1s 输出一次日志
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(time.Duration(c.intervalMs) * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -44,72 +66,33 @@ func (c *MockController) Run(ctx context.Context, cancel context.CancelFunc) {
 		case <-ticker.C:
 			// 遍历所有 serverName，分别生成对应的 redis 数据
 			for _, serverName := range c.serverNames {
-				redisData := model.RedisData{CharacterDatas: make([]*model.CharacterData, 0, c.userCount)}
-				for i := 0; i < c.userCount; i++ {
-					data := model.NewDefaultCharacterData(fmt.Sprintf("%s-%d", serverName, i))
-					redisData.CharacterDatas = append(redisData.CharacterDatas, data)
-				}
-				bytes, err := json.MarshalIndent(redisData, "", "    ")
+				// 生成注入到模板中 params 的数据
+				paramsBytes, err := c.injectParamsCache.genServerParamsBytes(serverName)
 				if err != nil {
-					logger.Errorf("Json marshal failed: %+v", err)
+					logger.Errorf("genParamsBytes failed: %+v", err)
 					continue
 				}
-				key := fmt.Sprintf("%s---PawnDatas", serverName)
-				_, err = c.redisCli.Set(ctx, key, string(bytes), 0).Result()
+
+				bytes, err := tamplate.GenRedisData(c.tplInfo, serverName, paramsBytes)
+				if err != nil {
+					logger.Errorf("GenRedisData failed: %+v", err)
+					continue
+				}
+				key := fmt.Sprintf(redisKeyTpl, serverName)
+				_, err = c.redisCli.Set(context.Background(), key, string(bytes), 0).Result()
 				if err != nil {
 					logger.Errorf("Redis set failed: %+v", err)
 					continue
 				}
-				logger.Infof("Redis set success. key: %s, value: %s", key, string(bytes))
+				logger.Infof("Redis set success. key: %s", key)
+				logger.Debugf("=== key: %s, value: %s", key, string(bytes))
+
+				// 根据 schema 刷新 serverParamsMap 数据，用于下一次注入
+				c.injectParamsCache.RefreshServerParams(serverName)
 			}
-
-			//logger.Infof("MockController run. serverNames: %v, userCount: %d", c.serverNames, c.userCount)
-			//redisData101, err := c.Get101Data()
-			//if err != nil {
-			//	logger.Errorf("Get101Data failed: %+v", err)
-			//	continue
-			//}
-			//
-			//copyCharacter := redisData101.CharacterDatas[0]
-			//copyCharacter.EntityId = "copy-entity"
-			//copyCharacter.Position.X += 50
-			//copyCharacter.Position.Y += 50
-			//if len(redisData101.CharacterDatas) == 1 {
-			//	redisData101.CharacterDatas = append(redisData101.CharacterDatas, copyCharacter)
-			//} else {
-			//	redisData101.CharacterDatas[1] = copyCharacter
-			//}
-			//
-
-			//newRedisData := model.RedisData{
-			//	CharacterDatas: []model.CharacterData{copyCharacter},
-			//}
-			//newBytes, err := json.Marshal(newRedisData)
-			//if err != nil {
-			//	logger.Errorf("json marshal failed: %+v", err)
-			//	continue
-			//}
-
 		case <-ctx.Done():
 			logger.Info("MockController exit")
 			return
 		}
 	}
-}
-
-func (c *MockController) Get101Data() (*model.RedisData, error) {
-	const key101 = "101---PawnDatas"
-	var ctx = context.Background()
-	result, err := c.redisCli.Get(ctx, key101).Result()
-	if err != nil {
-		return nil, errors.Wrapf(err, "redis get failed, key: %s", key101)
-	}
-
-	ret := model.RedisData{}
-	err = json.Unmarshal([]byte(result), &ret)
-	if err != nil {
-		return nil, errors.Wrapf(err, "json unmarshal failed, result: %s", result)
-	}
-	//logger.Infof("Get101Data. result: %+v", ret)
-	return &ret, nil
 }
