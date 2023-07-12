@@ -19,11 +19,11 @@ func GenRedisData(tpl *TemplateInfo, serverName string, paramsBytes []byte) ([]b
 	cueBytes = bytes.ReplaceAll(cueBytes, tpl.ParamsValueTobeReplaced, paramsBytes)
 	// 替换 serverName 的值
 	cueBytes = bytes.ReplaceAll(cueBytes, tpl.ServerNameTobeReplaced, []byte(serverName))
-	logger.Debugf("=== cueBytes: \n%s\n", cueBytes)
+	logger.Infof("=== cueBytes: \n%s\n", cueBytes)
 
 	// 2. cue 渲染 json
-	cc := cuecontext.New()
-	value := cc.CompileBytes(cueBytes)
+	ctx := cuecontext.New()
+	value := ctx.CompileBytes(cueBytes)
 	b, err := value.LookupPath(cue.ParsePath("output")).MarshalJSON()
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal json failed")

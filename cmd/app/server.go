@@ -15,6 +15,7 @@ import (
 	"mock-ue-server/pkg/controller"
 	"mock-ue-server/pkg/database"
 	"mock-ue-server/pkg/logutil"
+	"mock-ue-server/pkg/monitor"
 )
 
 const (
@@ -93,6 +94,8 @@ func NewMockUeServerCommand() *cobra.Command {
 
 func run(conf *config.Config) error {
 	logutil.Init(conf.PrintDebugLog)
+
+	go monitor.StartPprof()
 
 	// 启动 mock server
 	ctx, cancel := context.WithCancel(context.Background())
