@@ -19,6 +19,7 @@ func Test_parseServerNames(t *testing.T) {
 			[]string{"server1", "server2", "server3"}, false},
 		{"normal2", args{" server1 , server2 , server3 "},
 			[]string{"server1", "server2", "server3"}, false},
+		{"normal3", args{"01,02,03"}, []string{"01", "02", "03"}, false},
 		{"empty1", args{"server1, , server3"}, nil, true},
 		{"empty2", args{""}, nil, true},
 	}

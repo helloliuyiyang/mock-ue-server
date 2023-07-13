@@ -2,6 +2,7 @@ package tamplate
 
 import (
 	"bytes"
+	"fmt"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -18,8 +19,8 @@ func GenRedisData(tpl *TemplateInfo, serverName string, paramsBytes []byte) ([]b
 	// 替换 params 的值
 	cueBytes = bytes.ReplaceAll(cueBytes, tpl.ParamsValueTobeReplaced, paramsBytes)
 	// 替换 serverName 的值
-	cueBytes = bytes.ReplaceAll(cueBytes, tpl.ServerNameTobeReplaced, []byte(serverName))
-	logger.Infof("=== cueBytes: \n%s\n", cueBytes)
+	cueBytes = bytes.ReplaceAll(cueBytes, tpl.ServerNameTobeReplaced, []byte(fmt.Sprintf(`"%s"`, serverName)))
+	logger.Debugf("=== cueBytes: \n%s\n", cueBytes)
 
 	// 2. cue 渲染 json
 	ctx := cuecontext.New()

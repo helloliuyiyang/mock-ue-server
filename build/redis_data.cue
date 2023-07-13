@@ -31,5 +31,5 @@ output: {
 
 inject: {
     serverName: $serverName,
-    params: [$userCount]arr[...{x|float|-7000~-5000|100,y|float|13000~16000|100,yaw|float|-100~100|2}]
+    params: [$userCount]arr[...{x|float|-7000~-5000|100,y|float|13000~16000|100,yaw|float|-130~130|2}]
 }
