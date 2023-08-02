@@ -31,8 +31,8 @@ var cache *InjectParamsCache
 // InjectParamsCache 注入模板 params 的信息，包括 field schema信息 与 生成的值；非并发安全
 type InjectParamsCache struct {
 	// fieldSchemaMap 记录每个 field 的 schema 信息，key 为 fieldName
-	// eg: {x: {fieldName: x, fieldType: int, minValue: 0, maxValue: 100},
-	//		y: {fieldName: y, fieldType: float, minValue: 0, maxValue: 100}}
+	// eg: {x: {fieldName: x, fieldType: int, minValue: 0, maxValue: 100, maxChange: 10},
+	//		y: {fieldName: y, fieldType: float, minValue: 0, maxValue: 100, maxChange: 10}}
 	fieldSchemaMap map[string]fieldSchema
 	// serverParamsMap 记录各 server 的 params, key 为 serverName
 	// eg: {server1: [{x: 1, y: 2}, {x: 3, y: 4}], server2: [{x: 1, y: 2}, {x: 3, y: 4}]}
@@ -89,11 +89,13 @@ func genFieldSchemaMap(fieldsStr string) (map[string]fieldSchema, error) {
 	// 遍历 allFields, 解析每个 field 的 schema 信息
 	schemaMap := make(map[string]fieldSchema, len(allFields))
 	for _, field := range allFields {
+		// 解析 field, eg: field = "x|int|0~100"
 		splits := strings.Split(field, fieldSep)
 		if len(splits) != 3 && len(splits) != 4 {
 			return nil, errors.Errorf("invalid inject.params format: %s\n, field splits: %+v ",
 				fieldsStr, splits)
 		}
+		// 解析 value range, eg: valueRange = ["0", "100"]
 		valueRange := strings.Split(splits[fieldRangeIndex2], rangeSep)
 		if len(valueRange) != 2 {
 			return nil, errors.Errorf("invalid value range format: %s", splits[fieldRangeIndex2])
@@ -109,13 +111,14 @@ func genFieldSchemaMap(fieldsStr string) (map[string]fieldSchema, error) {
 		if min == max {
 			return nil, errors.Errorf("invalid range: %s", splits[fieldRangeIndex2])
 		}
+		// 如果用户定义了 max change, 则解析; 否则使用默认值 -1, 表示不限制
 		maxChange := defaultMaxChange
 		if len(splits) > 3 {
 			maxChange, err = strconv.ParseFloat(splits[fieldMaxChangeIndex3], 64)
 			if err != nil {
 				return nil, errors.Wrapf(err, "invalid max change: %s", splits[fieldMaxChangeIndex3])
 			}
-			if maxChange <= 0 {
+			if maxChange < 0 {
 				return nil, errors.Errorf("invalid max change: %s", splits[fieldMaxChangeIndex3])
 			}
 		}
@@ -187,9 +190,17 @@ func (c *InjectParamsCache) genServerParamsBytes(serverName string) ([]byte, err
 // RefreshServerParams 根据 schema 刷新 serverParamsMap 数据，用于下一次注入
 func (c *InjectParamsCache) RefreshServerParams(serverName string) {
 	// 根据 schema 刷新 serverParamsMap 数据
+	// serverParamsMap eg: {server1: [{x: 1, y: 2}, {x: 3, y: 4}], server2: [{x: 1, y: 2}, {x: 3, y: 4}]}
+	// 		其中 [{x: 1, y: 2}, {x: 3, y: 4}] 为其中一个 server 的 params(ps)
 	ps := c.serverParamsMap[serverName]
-	for _, schema := range c.fieldSchemaMap {
-		for i := 0; i < len(ps); i++ {
+	// fieldSchemaMap eg: {x: {fieldName: x, fieldType: int, minValue: 0, maxValue: 100, maxChange: 10},
+	//		  y: {fieldName: y, fieldType: float, minValue: 0, maxValue: 100, maxChange: 10}}
+	for _, schema := range c.fieldSchemaMap { // 遍历每个 field
+		if schema.maxChange == 0 {
+			// 如果 maxChange 为 0，表示该 field 不需要变化，直接跳过
+			continue
+		}
+		for i := 0; i < len(ps); i++ { // 遍历每个 server 的 params
 			old := ps[i][schema.fieldName]
 			switch schema.fieldType {
 			case fieldTypeFloat:
@@ -201,7 +212,7 @@ func (c *InjectParamsCache) RefreshServerParams(serverName string) {
 			case fieldTypeInt:
 				oldInt, ok := old.(int)
 				if !ok {
-					logger.Fatalf("Logic error, old value: %+v is not float64", old)
+					logger.Fatalf("Logic error, old value: %+v is not int", old)
 				}
 				ps[i][schema.fieldName] = int(genNewValueFloat(float64(oldInt), schema))
 			}

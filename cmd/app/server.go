@@ -149,7 +149,7 @@ func parseServerNames(serverNamesStr string) ([]string, error) {
 
 	// 检查是否解析出 serverNames
 	if len(serverNames) == 0 {
-		return nil, errors.Errorf("Parse serverNames failed, serverNamesStr: %s", serverNamesStr)
+		return nil, errors.Errorf("parse serverNames failed, serverNamesStr: %s", serverNamesStr)
 	}
 
 	return serverNames, nil
