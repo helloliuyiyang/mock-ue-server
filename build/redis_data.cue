@@ -21,7 +21,13 @@ output: {
 						"25": "FQAAAGwwMDY0ODUxMi11ZS1kZXZlbG9wAA=="
 					},
 					"walkSpeed": 150,
-					"netGuid": param.guid,
+					// "netGuid" 必须为偶数
+					if mod(param.guid, 2) == 0 {
+						"netGuid": param.guid
+					},
+					if mod(param.guid, 2) == 1 {
+						"netGuid": param.guid + 1
+					},
 				}
 			}
 	]
