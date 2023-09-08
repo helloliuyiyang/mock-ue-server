@@ -1,3 +1,7 @@
+import (
+    "strconv"
+)
+
 output: {
 	"repCharacterDatas": [
 			for i, param in inject.params {
@@ -7,7 +11,7 @@ output: {
 					{
 						"x": param.x,
 						"y": param.y,
-						"z": 2330.822509765625
+						"z": 2702
 					},
 					"rotation":
 					{
@@ -26,6 +30,8 @@ output: {
 						"netGuid": param.guid
 					},
 					if mod(param.guid, 2) == 1 {
+//						"netGuid": inject.serverNameInt + param.guid + 1
+//						"netGuid": strconv.Atoi(intject.serverName) + param.guid + 1 // 无法转换
 						"netGuid": param.guid + 1
 					},
 				}
@@ -35,5 +41,6 @@ output: {
 
 inject: {
     serverName: $serverName,
-    params: [$userCount]arr[...{x|float|-7000~-5000|100,y|float|13000~16000|100,yaw|float|-130~130|2,guid|int|8377614~8388888|0}]
+    params: [$userCount]arr[...{x|float|-6100~-6000|100,y|float|8300~8400|100,yaw|float|-130~130|2,guid|int|8377614~8388888|0}]
+//    serverNameInt: strconv.Atoi(serverName)
 }
